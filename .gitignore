@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+backend/test.db
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# ML artifacts are rebuilt by `python -m agrisense_ml.train`
+ml/artifacts/
+
+# Node
+node_modules/
+frontend/.next/
+frontend/out/
