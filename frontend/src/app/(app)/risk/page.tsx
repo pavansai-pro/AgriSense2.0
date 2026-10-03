@@ -75,8 +75,8 @@ export default function RiskPage() {
           crop,
           state: loc.state || null,
           district: loc.district || null,
-          sowing_date: sowing,
-          planned_harvest: harvest,
+          sowing_date: sowing || null,
+          planned_harvest: harvest || null,
           lang,
         },
       });

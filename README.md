@@ -60,6 +60,20 @@ ruff check backend ml
 | POST | `/api/voice/logs` | voice interaction logs |
 | GET | `/api/dashboard`, `/api/meta/locations`, `/api/health` | dashboard, states/districts, health |
 
+## Deploy (free tiers)
+
+| Part | Host | Config |
+|---|---|---|
+| FastAPI backend | Render (Docker, free) | `render.yaml` |
+| Next.js frontend | Vercel (root directory `frontend`) | `BACKEND_URL` |
+| PostgreSQL | Neon | `DATABASE_URL` |
+| MongoDB | Atlas M0 (Network Access `0.0.0.0/0`) | `MONGO_URL` |
+
+1. Render: New > Blueprint > this repo. Fill in `DATABASE_URL` (Neon string; `postgres://` is auto-converted to the psycopg driver), `MONGO_URL`, `FRONTEND_URL`/`CORS_ORIGINS` (the Vercel URL) and `OAUTH_REDIRECT_BASE` (the Render URL). `JWT_SECRET` is generated. Check `https://<render-url>/api/health`.
+2. Vercel: import the repo with root directory `frontend` and set `BACKEND_URL=https://<render-url>`. The browser only talks to Vercel; `/api/*` is proxied to Render by `next.config.ts`.
+
+Render's free plan sleeps after 15 minutes idle, so the first request after a pause takes about a minute.
+
 ## Data note
 
 `sensor_Crop_Dataset (1).csv` has identical feature distributions for every crop; a RandomForest trained on it scores at chance (16.6% vs 16.7%). The recommender therefore weights that model at 0 and relies on agronomic ranges and the state agricultural census until better labelled data is supplied.
