@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Response, status
 from sqlalchemy import text
 
 from agrisense_ml.knowledge import CROP_PROFILES, STATE_COORDS
@@ -19,17 +19,19 @@ def locations() -> dict:
 
 
 @router.get("/health")
-def health() -> dict:
-    status = {"postgres": "ok", "mongo": "ok"}
+def health(response: Response) -> dict:
+    result = {"postgres": "ok", "mongo": "ok"}
     try:
         with engine.connect() as c:
             c.execute(text("select 1"))
     except Exception as e:  # noqa: BLE001
-        status["postgres"] = f"error: {type(e).__name__}"
+        result["postgres"] = f"error: {type(e).__name__}"
     try:
         get_mongo().command("ping")
     except Exception as e:  # noqa: BLE001
-        status["mongo"] = f"error: {type(e).__name__}"
+        result["mongo"] = f"error: {type(e).__name__}"
     model = load_artifact("metadata.json")["crop_model"]
-    status["model"] = {"accuracy": model["accuracy"], "ml_weight": model["ml_weight"]}
-    return status
+    result["model"] = {"accuracy": model["accuracy"], "ml_weight": model["ml_weight"]}
+    if result["postgres"] != "ok" or result["mongo"] != "ok":
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return result
