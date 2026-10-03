@@ -39,13 +39,20 @@ def test_crop_predict(client, auth):
     assert hist[0]["recommended"] == body["recommended"]
 
 
-def test_weather_forecast(client):
-    r = client.get("/api/weather/forecast", params={"state": "Telangana"})
+def test_weather_forecast(client, auth):
+    assert client.get("/api/weather/forecast", params={"state": "Telangana"}).status_code == 401
+    r = client.get("/api/weather/forecast", params={"state": "Telangana"}, headers=auth)
     assert r.status_code == 200
     assert len(r.json()["days"]) == 16
     assert r.json()["provider"] == "open-meteo"
-    assert client.get("/api/weather/forecast", params={"state": "Telangana"}).json()["cached"] is True
-    assert client.get("/api/weather/forecast").status_code == 422
+    again = client.get("/api/weather/forecast", params={"state": "Telangana"}, headers=auth).json()
+    assert again["cached"] is True
+    # Same rounded coordinates, different request: label comes from this request, not the cache.
+    lat, lon = r.json()["lat"], r.json()["lon"]
+    by_coords = client.get("/api/weather/forecast", params={"lat": lat, "lon": lon}, headers=auth).json()
+    assert by_coords["cached"] is True
+    assert by_coords["location"] != r.json()["location"]
+    assert client.get("/api/weather/forecast", headers=auth).status_code == 422
 
 
 def test_risk_assess(client, auth):

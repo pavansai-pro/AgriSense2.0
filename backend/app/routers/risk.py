@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pymongo.database import Database
@@ -41,7 +41,7 @@ def assess(
             soil,
             body.crop,
             to_forecast_days(weather) if weather else [],
-            body.sowing_date or date.today(),
+            body.sowing_date,
             body.planned_harvest,
         )
     except ValueError as e:

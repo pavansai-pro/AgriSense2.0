@@ -207,7 +207,7 @@ def assess_risk(
     prof = CROP_PROFILES[crop]
     days = list(forecast or [])
     if planned_harvest:
-        days = [d for d in days if d.date <= planned_harvest] or days[:1]
+        days = [d for d in days if d.date <= planned_harvest]
     factors = (
         _soil_factors(soil, prof)
         + _weather_factors(days, prof, soil)

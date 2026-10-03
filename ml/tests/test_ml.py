@@ -46,3 +46,11 @@ def test_risk_without_weather_excludes_factors():
     soil = SoilReading(n=90, p=45, k=50, temperature=26, moisture=75, ph=6.2)
     res = assess_risk(soil, "Maize", [])
     assert all(not f["available"] for f in res["factors"] if f["code"] in {"excess_rain", "dry_spell"})
+
+
+def test_risk_ignores_weather_after_harvest():
+    soil = SoilReading(90, 45, 45, 26, 80, 6.5)
+    storm = [ForecastDay(date.today() + timedelta(days=5 + i), 45, 32, 80, 95) for i in range(5)]
+    res = assess_risk(soil, "Rice", storm, date.today() - timedelta(days=120), date.today() + timedelta(days=1))
+    weather = [f for f in res["factors"] if f["code"] in {"temperature_stress", "excess_rain"}]
+    assert weather and all(not f["available"] for f in weather)

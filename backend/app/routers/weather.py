@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.postgres import get_db
+from app.deps import get_current_user
+from app.models.sql import User
 from app.services.weather import LocationError, get_forecast
 
 router = APIRouter(prefix="/api/weather", tags=["weather"])
@@ -15,6 +17,7 @@ def forecast(
     lon: float | None = Query(default=None, ge=-180, le=180),
     days: int = Query(default=16, ge=1, le=16),
     db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ) -> dict:
     try:
         return get_forecast(db, state, district, lat, lon, days)

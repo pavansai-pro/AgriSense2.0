@@ -158,7 +158,12 @@ export function normalizeDigits(text: string) {
 }
 
 export function normalize(text: string) {
-  return normalizeDigits(text).toLowerCase().replace(/[.,!?।]/g, " ").replace(/\s+/g, " ").trim();
+  return normalizeDigits(text)
+    .toLowerCase()
+    .replace(/(?<!\d)\.|\.(?!\d)/g, " ")
+    .replace(/[,!?।]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function matchIntent(transcript: string, lang: Lang): Intent | null {
@@ -196,8 +201,10 @@ export function parseSoilValues(transcript: string): Partial<Soil> {
   const found: { field: keyof Soil; index: number; length: number }[] = [];
   for (const [field, words] of Object.entries(FIELD_WORDS) as [keyof Soil, string[]][]) {
     for (const w of words) {
-      const index = text.indexOf(w);
-      if (index >= 0 && (field !== "ph" || !/[a-z]/.test(text[index + w.length] ?? ""))) {
+      // ASCII keywords must be whole words so "ph" doesn't match inside "phosphorus".
+      const re = /^[a-z ]+$/.test(w) ? new RegExp(`(?<![a-z])${w}(?![a-z])`) : null;
+      const index = re ? text.search(re) : text.indexOf(w);
+      if (index >= 0) {
         found.push({ field, index, length: w.length });
         break;
       }

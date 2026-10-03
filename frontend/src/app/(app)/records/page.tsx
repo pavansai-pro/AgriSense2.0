@@ -65,7 +65,9 @@ export default function RecordsPage() {
   const [soil, setSoil] = useState<SoilForm>(EMPTY_SOIL);
   const [soilNotes, setSoilNotes] = useState("");
   const [harvest, setHarvest] = useState<HarvestForm>({ ...EMPTY_HARVEST, crop: user?.current_crop ?? "" });
-  const records = useLiveQuery(() => db.records.orderBy("updated_at").reverse().toArray(), []) ?? [];
+  const owner = user?.id ?? -1;
+  const records =
+    useLiveQuery(() => db.records.where("owner").equals(owner).reverse().sortBy("updated_at"), [owner]) ?? [];
   const visible = records.filter((r) => !r.deleted);
 
   async function afterSave() {

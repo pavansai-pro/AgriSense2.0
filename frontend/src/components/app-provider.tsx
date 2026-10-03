@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { api, tokens } from "@/lib/api";
 import { type MessageKey, translate } from "@/lib/i18n";
 import { LANGUAGES, type Lang } from "@/lib/languages";
-import { cacheGet, cacheSet } from "@/lib/offline-db";
+import { cacheGet, cacheSet, setRecordOwner } from "@/lib/offline-db";
 import { pendingCount, syncNow } from "@/lib/sync";
 import type { TokenResponse, User } from "@/lib/types";
 
@@ -55,6 +55,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const setUser = useCallback((u: User) => {
+    setRecordOwner(u.id);
     setUserState(u);
     void cacheSet("user", u);
   }, []);
@@ -107,7 +108,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(() => {
     tokens.clear();
+    setRecordOwner(null);
     setUserState(null);
+    setSync((s) => ({ ...s, pending: 0, done: 0, total: 0 }));
     void cacheSet("user", null);
   }, []);
 
@@ -119,12 +122,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       if (tokens.access) {
         const cached = await cacheGet<User | null>("user");
-        if (cached?.value) setUserState(cached.value);
+        if (cached?.value) {
+          setRecordOwner(cached.value.id);
+          setUserState(cached.value);
+        }
         if (navigator.onLine) {
           try {
             setUser(await api<User>("/api/auth/me"));
           } catch {
-            if (!tokens.access) setUserState(null);
+            if (!tokens.access) {
+              setRecordOwner(null);
+              setUserState(null);
+            }
           }
         }
       }

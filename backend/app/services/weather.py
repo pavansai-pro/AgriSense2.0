@@ -18,6 +18,7 @@ from app.core.config import get_settings
 from app.models.sql import WeatherCache
 from app.services.ml import load_artifact
 
+IST = timezone(timedelta(hours=5, minutes=30))
 log = logging.getLogger(__name__)
 
 WMO = {
@@ -147,6 +148,10 @@ def _open_meteo(lat: float, lon: float, days: int) -> list[dict]:
     ]
 
 
+def _today_ist() -> date:
+    return datetime.now(IST).date()
+
+
 def get_forecast(
     db: Session,
     state: str | None = None,
@@ -155,16 +160,23 @@ def get_forecast(
     lon: float | None = None,
     days: int = 16,
 ) -> dict:
+    """Forecast for a location. Only provider data is cached (by rounded coords + horizon);
+    the label and state baseline always come from the current request."""
     s = get_settings()
     la, lo, label = resolve_location(state, district, lat, lon)
     key = f"{la:.2f}:{lo:.2f}:{days}"
-    st = normalize_state(state)
-    baseline = load_artifact("weather_baseline.json").get(st or "", None)
+    baseline = load_artifact("weather_baseline.json").get(normalize_state(state) or "", None)
+    request_info = {"location": label, "lat": la, "lon": lo, "baseline": baseline}
+    today = _today_ist().isoformat()
 
     cached = db.get(WeatherCache, key)
     fresh_after = datetime.now(timezone.utc) - timedelta(minutes=s.weather_cache_minutes)
-    if cached and cached.fetched_at.replace(tzinfo=cached.fetched_at.tzinfo or timezone.utc) > fresh_after:
-        return {**cached.payload, "cached": True}
+    if cached:
+        cached_days = cached.payload.get("days") or []
+        fetched = cached.fetched_at.replace(tzinfo=cached.fetched_at.tzinfo or timezone.utc)
+        # A forecast fetched before midnight starts "yesterday"; refetch instead of serving it.
+        if fetched > fresh_after and cached_days and cached_days[0]["date"] >= today:
+            return {**cached.payload, **request_info, "cached": True}
 
     provider, daily = None, []
     if s.openweather_api_key:
@@ -180,32 +192,22 @@ def get_forecast(
 
     if not daily:
         if cached:
-            return {**cached.payload, "cached": True, "stale": True}
+            remaining = [d for d in cached.payload.get("days") or [] if d["date"] >= today]
+            return {**cached.payload, **request_info, "days": remaining, "cached": True, "stale": True}
         return {
-            "location": label,
-            "lat": la,
-            "lon": lo,
+            **request_info,
             "provider": "baseline",
             "days": [],
-            "baseline": baseline,
             "fetched_at": datetime.now(timezone.utc).isoformat(),
         }
 
-    payload = {
-        "location": label,
-        "lat": la,
-        "lon": lo,
-        "provider": provider,
-        "days": daily,
-        "baseline": baseline,
-        "fetched_at": datetime.now(timezone.utc).isoformat(),
-    }
+    payload = {"provider": provider, "days": daily, "fetched_at": datetime.now(timezone.utc).isoformat()}
     if cached:
         cached.payload, cached.provider, cached.fetched_at = payload, provider, datetime.now(timezone.utc)
     else:
         db.add(WeatherCache(key=key, provider=provider, latitude=la, longitude=lo, payload=payload))
     db.commit()
-    return {**payload, "cached": False}
+    return {**payload, **request_info, "cached": False}
 
 
 def to_forecast_days(payload: dict) -> list[ForecastDay]:

@@ -114,7 +114,14 @@ def google_login(request: Request) -> RedirectResponse:
         "prompt": "select_account",
     }
     resp = RedirectResponse(f"{GOOGLE_AUTH}?{urlencode(params)}")
-    resp.set_cookie("oauth_state", state, max_age=600, httponly=True, samesite="lax")
+    resp.set_cookie(
+        "oauth_state",
+        state,
+        max_age=600,
+        httponly=True,
+        samesite="lax",
+        secure=s.oauth_redirect_base.startswith("https://"),
+    )
     return resp
 
 
@@ -150,9 +157,12 @@ def google_callback(code: str, state: str, request: Request, db: Session = Depen
         account.last_login_at = datetime.now(timezone.utc)
     else:
         email = (profile.get("email") or "").lower() or None
-        user = db.scalar(select(User).where(User.email == email)) if email else None
+        verified = profile.get("email_verified") is True
+        # Only link to an existing account when Google has verified the address.
+        existing = db.scalar(select(User).where(User.email == email)) if email else None
+        user = existing if verified else None
         if not user:
-            user = User(name=profile.get("name") or "Farmer", email=email)
+            user = User(name=profile.get("name") or "Farmer", email=None if existing else email)
             db.add(user)
             db.flush()
         db.add(
