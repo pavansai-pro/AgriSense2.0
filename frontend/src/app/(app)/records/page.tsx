@@ -67,7 +67,8 @@ export default function RecordsPage() {
   const [harvest, setHarvest] = useState<HarvestForm>({ ...EMPTY_HARVEST, crop: user?.current_crop ?? "" });
   const owner = user?.id ?? -1;
   const records =
-    useLiveQuery(() => db.records.where("owner").equals(owner).reverse().sortBy("updated_at"), [owner]) ?? [];
+    useLiveQuery(async () => (await db.records.where("owner").equals(owner).sortBy("updated_at")).reverse(), [owner]) ??
+    [];
   const visible = records.filter((r) => !r.deleted);
 
   async function afterSave() {

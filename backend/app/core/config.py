@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     ml_data_dir: Path = REPO_ROOT / "ml" / "data" / "raw"
 
     @model_validator(mode="after")
+    def _psycopg_driver(self) -> "Settings":
+        # Neon/Render/Heroku hand out postgres:// or postgresql:// URLs; SQLAlchemy needs the psycopg driver.
+        for prefix in ("postgres://", "postgresql://"):
+            if self.database_url.startswith(prefix):
+                self.database_url = "postgresql+psycopg://" + self.database_url[len(prefix) :]
+        return self
+
+    @model_validator(mode="after")
     def _require_jwt_secret(self) -> "Settings":
         weak = len(self.jwt_secret) < 16 or self.jwt_secret.startswith("change-me")
         if weak and self.environment != "development":

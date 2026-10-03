@@ -1,0 +1,31 @@
+# Render Blueprint for the AgriSense FastAPI backend (free plan).
+# Postgres (Neon) and MongoDB (Atlas) are external; paste their URLs when Render prompts.
+services:
+  - type: web
+    name: agrisense-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: MONGO_URL
+        sync: false
+      - key: MONGO_DB
+        value: agrisense
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: OAUTH_REDIRECT_BASE
+        sync: false
+      - key: OPENWEATHER_API_KEY
+        sync: false

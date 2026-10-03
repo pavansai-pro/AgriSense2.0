@@ -50,7 +50,7 @@ export default function CropPage() {
     try {
       const res = await api<CropPrediction>("/api/crops/predict", {
         method: "POST",
-        json: { ...values, state: loc.state || null, sowing_date: sowing, client_id: clientId },
+        json: { ...values, state: loc.state || null, sowing_date: sowing || null, client_id: clientId },
       });
       setResult(res);
       const top = res.crops[0];
