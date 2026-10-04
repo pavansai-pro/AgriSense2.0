@@ -10,6 +10,10 @@ from app.core.config import get_settings
 
 log = logging.getLogger(__name__)
 
+# Keep a single in-memory recommender instance for startup performance
+_recommender_cache: CropRecommender | None = None
+_artifact_cache: dict[str, dict] = {}
+
 
 def ensure_artifacts() -> None:
     s = get_settings()
@@ -21,13 +25,20 @@ def ensure_artifacts() -> None:
     train.run(s.ml_data_dir, s.ml_artifacts_dir)
 
 
-@lru_cache
 def get_recommender() -> CropRecommender:
-    ensure_artifacts()
-    return CropRecommender(get_settings().ml_artifacts_dir)
+    global _recommender_cache
+    if _recommender_cache is None:
+        ensure_artifacts()
+        _recommender_cache = CropRecommender(get_settings().ml_artifacts_dir)
+    return _recommender_cache
 
 
-@lru_cache
+@lru_cache(maxsize=16)
 def load_artifact(name: str) -> dict:
     ensure_artifacts()
     return json.loads((get_settings().ml_artifacts_dir / name).read_text())
+
+
+def clear_caches() -> None:
+    global _recommender_cache
+    _recommender_cache = None
