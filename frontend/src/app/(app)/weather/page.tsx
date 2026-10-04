@@ -13,12 +13,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LANGUAGES } from "@/lib/languages";
-import type { Forecast } from "@/lib/types";
+import type { Forecast, ForecastDay } from "@/lib/types";
 import { useCachedQuery } from "@/lib/use-cached-query";
 
 export default function WeatherPage() {
   const { t, user, lang } = useApp();
-  const locale = LANGUAGES.find((l) => l.code === lang)!.speech;
+  const locale = LANGUAGES.find((l) => l.code === lang)?.speech || "en-US";
   const [loc, setLoc] = useState({ state: user?.state ?? "", district: user?.district ?? "" });
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
 
@@ -27,19 +27,34 @@ export default function WeatherPage() {
     : loc.state
       ? `state=${encodeURIComponent(loc.state)}${loc.district ? `&district=${encodeURIComponent(loc.district)}` : ""}`
       : null;
-  const { data, loading, error, savedAt } = useCachedQuery<Forecast>(query ? `/api/weather/forecast?days=16&${query}` : null);
+  
+  const { data, loading, error, savedAt } = useCachedQuery<Forecast>(query ? `/api/weather/forecast?days=5&${query}` : null);
 
   function locate() {
-    navigator.geolocation?.getCurrentPosition((pos) => setCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude }));
+    if (typeof navigator !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        setCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+      });
+    }
   }
 
-  const chart = data?.days.map((d) => ({ day: formatDay(d.date, locale), max: d.tmax, min: d.tmin, rain: d.precip_mm }));
+  // Safely construct chart data with validation
+  const chart = data?.days
+    ? data.days
+        .filter((d): d is ForecastDay => d && typeof d.date === "string" && typeof d.tmax === "number" && typeof d.tmin === "number")
+        .map((d) => ({
+          day: formatDay(d.date, locale),
+          max: Math.round(d.tmax * 10) / 10,
+          min: Math.round(d.tmin * 10) / 10,
+          rain: Math.round((d.precip_mm || 0) * 10) / 10,
+        }))
+    : [];
 
   return (
     <>
-      <PageHeader title={t("weather")} description={t("forecast16")} />
+      <PageHeader title={t("weather")} description={t("forecast5") || "5-day forecast"} />
       <Card className="mb-6">
-        <CardContent className="flex flex-col gap-4">
+        <CardContent className="flex flex-col gap-4 pt-6">
           <LocationPicker
             state={loc.state}
             district={loc.district}
@@ -49,7 +64,7 @@ export default function WeatherPage() {
             }}
           />
           <Button variant="outline" size="lg" onClick={locate} className="self-start">
-            <LocateFixed />
+            <LocateFixed className="mr-2 h-5 w-5" />
             {t("useMyLocation")}
           </Button>
         </CardContent>
@@ -70,67 +85,79 @@ export default function WeatherPage() {
 
       {loading && !data ? (
         <Skeleton className="h-72" />
-      ) : data ? (
+      ) : data && data.days && data.days.length > 0 ? (
         <div className="flex flex-col gap-4">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2" data-speak>
-                <MapPin className="size-5" aria-hidden />
+                <MapPin className="h-5 w-5" aria-hidden />
                 {data.location}
               </CardTitle>
               <CardDescription>
                 {data.provider === "openweather" ? "OpenWeather" : "Open-Meteo"} ·{" "}
                 {new Date(data.fetched_at).toLocaleString(locale)}
-                {data.baseline && ` · Typical (weather-1.csv): ${data.baseline.temp_c}°C, ${data.baseline.humidity}% humidity`}
+                {data.baseline && ` · Typical: ${data.baseline.temp_c}°C, ${data.baseline.humidity}% humidity`}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-56 w-full" aria-hidden>
-                <ResponsiveContainer>
-                  <ComposedChart data={chart} margin={{ left: -20, right: 0, top: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="day" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-                    <YAxis yAxisId="t" tick={{ fontSize: 11 }} unit="°" />
-                    <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 11 }} unit="mm" />
-                    <Tooltip />
-                    <Bar yAxisId="r" dataKey="rain" name={t("rain")} fill="var(--chart-2)" radius={[4, 4, 0, 0]} />
-                    <Line yAxisId="t" dataKey="max" name="Max °C" stroke="var(--chart-4)" strokeWidth={2} dot={false} />
-                    <Line yAxisId="t" dataKey="min" name="Min °C" stroke="var(--chart-1)" strokeWidth={2} dot={false} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
+              {chart.length > 0 ? (
+                <div className="h-56 w-full" aria-hidden>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={chart} margin={{ left: -20, right: 0, top: 8, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                      <XAxis dataKey="day" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+                      <YAxis yAxisId="t" tick={{ fontSize: 11 }} unit="°" />
+                      <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 11 }} unit="mm" />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: "rgba(255, 255, 255, 0.95)", border: "1px solid #ccc" }}
+                        labelFormatter={(label) => `${label}`}
+                      />
+                      <Bar yAxisId="r" dataKey="rain" name={t("rain") || "Rain"} fill="var(--chart-2)" radius={[4, 4, 0, 0]} />
+                      <Line yAxisId="t" dataKey="max" name="Max °C" stroke="var(--chart-4)" strokeWidth={2} dot={false} />
+                      <Line yAxisId="t" dataKey="min" name="Min °C" stroke="var(--chart-1)" strokeWidth={2} dot={false} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <p className="text-center text-muted-foreground">{t("noData") || "No data available"}</p>
+              )}
             </CardContent>
           </Card>
 
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4" data-testid="forecast-days">
-            {data.days.map((d, i) => (
-              <li key={d.date} className="flex flex-col gap-1 rounded-2xl border bg-card p-3 shadow-sm" {...(i < 3 ? { "data-speak": true } : {})}>
-                <span className="text-sm font-medium">{formatDay(d.date, locale, { weekday: "long", day: "numeric", month: "short" })}</span>
-                <div className="flex items-center gap-2">
-                  <WeatherIcon condition={d.condition} className="size-8 text-sky-600" />
-                  <span className="text-2xl font-semibold tabular-nums">{Math.round(d.tmax)}°</span>
-                  <span className="text-muted-foreground tabular-nums">{Math.round(d.tmin)}°</span>
-                </div>
-                <span className="text-xs text-muted-foreground">{d.condition}</span>
-                <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Droplets className="size-3.5" aria-hidden />
-                    {d.precip_mm.toFixed(1)} mm{d.rain_chance !== null && ` · ${d.rain_chance}%`}
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-5" data-testid="forecast-days">
+            {data.days.slice(0, 5).map((d, i) => {
+              if (!d || typeof d.date !== "string" || typeof d.tmax !== "number") return null;
+              return (
+                <li key={d.date} className="flex flex-col gap-1 rounded-2xl border bg-card p-3 shadow-sm" {...(i < 3 ? { "data-speak": true } : {})}>
+                  <span className="text-sm font-medium">
+                    {i === 0 ? "Today" : i === 1 ? "Tomorrow" : formatDay(d.date, locale, { weekday: "short", day: "numeric" })}
                   </span>
-                  {d.wind_kmh !== null && (
+                  <div className="flex items-center gap-2">
+                    <WeatherIcon condition={d.condition || ""} className="h-8 w-8 text-sky-600" />
+                    <span className="text-2xl font-semibold tabular-nums">{Math.round(d.tmax)}°</span>
+                    <span className="text-muted-foreground tabular-nums">{Math.round(d.tmin)}°</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{d.condition || "—"}</span>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
-                      <Wind className="size-3.5" aria-hidden />
-                      {Math.round(d.wind_kmh)} km/h
+                      <Droplets className="h-3.5 w-3.5" aria-hidden />
+                      {(d.precip_mm || 0).toFixed(1)} mm{d.rain_chance !== null && d.rain_chance !== undefined ? ` · ${d.rain_chance}%` : ""}
                     </span>
-                  )}
-                  {d.humidity !== null && <span>{t("humidity")} {Math.round(d.humidity)}%</span>}
-                </div>
-              </li>
-            ))}
+                    {d.wind_kmh !== null && d.wind_kmh !== undefined && (
+                      <span className="flex items-center gap-1">
+                        <Wind className="h-3.5 w-3.5" aria-hidden />
+                        {Math.round(d.wind_kmh)} km/h
+                      </span>
+                    )}
+                    {d.humidity !== null && d.humidity !== undefined && <span>{t("humidity") || "Humidity"} {Math.round(d.humidity)}%</span>}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : (
-        <p className="text-muted-foreground">{t("state")}…</p>
+        <p className="text-muted-foreground">{t("state") || "Select a state"}…</p>
       )}
     </>
   );
