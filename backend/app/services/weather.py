@@ -1,11 +1,4 @@
-"""16-day forecast with OpenWeather (if a key is configured) and Open-Meteo fallback.
-
-Results are cached in PostgreSQL (weather_cache) so repeat requests and offline-ish
-situations are served from structured storage.
-"""
-
-from __future__ import annotations
-
+import json
 import logging
 from datetime import date, datetime, timedelta, timezone
 
@@ -64,7 +57,7 @@ def _coerce_day(d: dict) -> dict | None:
 
 
 def _future_days_from_today(days: list[dict], today: str) -> list[dict]:
-    """Only keep entries from the current day onward, sorted chronologically."""
+    """Keep entries from the current day onward, sorted chronologically."""
     valid = []
     for d in days:
         item = _coerce_day(d)
@@ -108,9 +101,10 @@ def resolve_location(
 
 
 def _openweather(lat: float, lon: float, key: str, days: int) -> list[dict]:
+    """Fetch 16-day forecast from OpenWeather API."""
     r = httpx.get(
         "https://api.openweathermap.org/data/2.5/forecast/daily",
-        params={"lat": lat, "lon": lon, "cnt": days, "units": "metric", "appid": key},
+        params={"lat": lat, "lon": lon, "cnt": min(days, 16), "units": "metric", "appid": key},
         timeout=8,
     )
     r.raise_for_status()
@@ -132,12 +126,13 @@ def _openweather(lat: float, lon: float, key: str, days: int) -> list[dict]:
 
 
 def _open_meteo(lat: float, lon: float, days: int) -> list[dict]:
+    """Fallback to Open-Meteo API for up to 16 days."""
     r = httpx.get(
         "https://api.open-meteo.com/v1/forecast",
         params={
             "latitude": lat,
             "longitude": lon,
-            "forecast_days": days,
+            "forecast_days": min(days, 16),
             "timezone": "Asia/Kolkata",
             "daily": ",".join(
                 [
@@ -180,9 +175,9 @@ def get_forecast(
     district: str | None = None,
     lat: float | None = None,
     lon: float | None = None,
-    days: int = 5,
+    days: int = 16,
 ) -> dict:
-    """Forecast for a location. Show today and the next few days only for user-facing UI."""
+    """Fetch and cache weather forecast for up to 16 days using OpenWeather API."""
     s = get_settings()
     la, lo, label = resolve_location(state, district, lat, lon)
     key = f"{la:.2f}:{lo:.2f}:{days}"
@@ -222,8 +217,6 @@ def get_forecast(
         }
 
     daily_filtered = _future_days_from_today(daily, today)
-    if len(daily_filtered) > days:
-        daily_filtered = daily_filtered[:days]
 
     payload = {"provider": provider, "days": daily_filtered, "fetched_at": datetime.now(timezone.utc).isoformat()}
     if cached:
