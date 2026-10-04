@@ -28,7 +28,8 @@ export default function WeatherPage() {
       ? `state=${encodeURIComponent(loc.state)}${loc.district ? `&district=${encodeURIComponent(loc.district)}` : ""}`
       : null;
   
-  const { data, loading, error, savedAt } = useCachedQuery<Forecast>(query ? `/api/weather/forecast?days=5&${query}` : null);
+  // Request 16 days for weather page
+  const { data, loading, error, savedAt } = useCachedQuery<Forecast>(query ? `/api/weather/forecast?days=16&${query}` : null);
 
   function locate() {
     if (typeof navigator !== "undefined" && navigator.geolocation) {
@@ -52,7 +53,7 @@ export default function WeatherPage() {
 
   return (
     <>
-      <PageHeader title={t("weather")} description={t("forecast5") || "5-day forecast"} />
+      <PageHeader title={t("weather")} description={t("forecast16")} />
       <Card className="mb-6">
         <CardContent className="flex flex-col gap-4 pt-6">
           <LocationPicker
@@ -124,8 +125,8 @@ export default function WeatherPage() {
             </CardContent>
           </Card>
 
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-5" data-testid="forecast-days">
-            {data.days.slice(0, 5).map((d, i) => {
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4" data-testid="forecast-days">
+            {data.days.slice(0, 16).map((d, i) => {
               if (!d || typeof d.date !== "string" || typeof d.tmax !== "number") return null;
               return (
                 <li key={d.date} className="flex flex-col gap-1 rounded-2xl border bg-card p-3 shadow-sm" {...(i < 3 ? { "data-speak": true } : {})}>
