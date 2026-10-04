@@ -52,6 +52,28 @@ class LocationError(ValueError):
     pass
 
 
+def _coerce_day(d: dict) -> dict | None:
+    """Validate weather payload and ensure dates are valid."""
+    if not d or not d.get("date"):
+        return None
+    try:
+        date.fromisoformat(d["date"])
+    except ValueError:
+        return None
+    return d
+
+
+def _future_days_from_today(days: list[dict], today: str) -> list[dict]:
+    """Only keep entries from the current day onward, sorted chronologically."""
+    valid = []
+    for d in days:
+        item = _coerce_day(d)
+        if item and item["date"] >= today:
+            valid.append(item)
+    valid.sort(key=lambda d: d["date"])
+    return valid
+
+
 def _geocode_district(district: str, state: str | None) -> tuple[float, float] | None:
     try:
         r = httpx.get(
@@ -158,10 +180,9 @@ def get_forecast(
     district: str | None = None,
     lat: float | None = None,
     lon: float | None = None,
-    days: int = 16,
+    days: int = 5,
 ) -> dict:
-    """Forecast for a location. Only provider data is cached (by rounded coords + horizon);
-    the label and state baseline always come from the current request."""
+    """Forecast for a location. Show today and the next few days only for user-facing UI."""
     s = get_settings()
     la, lo, label = resolve_location(state, district, lat, lon)
     key = f"{la:.2f}:{lo:.2f}:{days}"
@@ -174,7 +195,6 @@ def get_forecast(
     if cached:
         cached_days = cached.payload.get("days") or []
         fetched = cached.fetched_at.replace(tzinfo=cached.fetched_at.tzinfo or timezone.utc)
-        # A forecast fetched before midnight starts "yesterday"; refetch instead of serving it.
         if fetched > fresh_after and cached_days and cached_days[0]["date"] >= today:
             return {**cached.payload, **request_info, "cached": True}
 
@@ -192,7 +212,7 @@ def get_forecast(
 
     if not daily:
         if cached:
-            remaining = [d for d in cached.payload.get("days") or [] if d["date"] >= today]
+            remaining = _future_days_from_today(cached.payload.get("days") or [], today)
             return {**cached.payload, **request_info, "days": remaining, "cached": True, "stale": True}
         return {
             **request_info,
@@ -201,7 +221,11 @@ def get_forecast(
             "fetched_at": datetime.now(timezone.utc).isoformat(),
         }
 
-    payload = {"provider": provider, "days": daily, "fetched_at": datetime.now(timezone.utc).isoformat()}
+    daily_filtered = _future_days_from_today(daily, today)
+    if len(daily_filtered) > days:
+        daily_filtered = daily_filtered[:days]
+
+    payload = {"provider": provider, "days": daily_filtered, "fetched_at": datetime.now(timezone.utc).isoformat()}
     if cached:
         cached.payload, cached.provider, cached.fetched_at = payload, provider, datetime.now(timezone.utc)
     else:
