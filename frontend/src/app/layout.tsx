@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Noto_Sans, Noto_Sans_Devanagari, Noto_Sans_Tamil, Noto_Sans_Telugu } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 
 import { Providers } from "@/components/providers";
 
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     >
       <body className="min-h-dvh antialiased">
         <Providers>{children}</Providers>
+        <Analytics />
       </body>
     </html>
   );
