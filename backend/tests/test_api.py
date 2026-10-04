@@ -9,6 +9,16 @@ def test_health(client):
     assert r.json()["postgres"] == "ok" and r.json()["mongo"] == "ok"
 
 
+def test_health_503_when_db_down(client, monkeypatch):
+    def down():
+        raise ConnectionError("mongo down")
+
+    monkeypatch.setattr("app.routers.meta.get_mongo", down)
+    r = client.get("/api/health")
+    assert r.status_code == 503
+    assert r.json()["mongo"].startswith("error")
+
+
 def test_auth_flow(client, auth):
     assert client.get("/api/auth/me").status_code == 401
     me = client.get("/api/auth/me", headers=auth).json()
